@@ -262,7 +262,7 @@ def make_move(board, move):
                                        1] = board[blank_x, blank_y - 1], board[blank_x, blank_y]
     elif move == 'up':
         board[blank_x, blank_y], board[blank_x + 1,
-                                       blank_y] = board[blank_x - 1, blank_y], board[blank_x, blank_y]
+                                       blank_y] = board[blank_x + 1, blank_y], board[blank_x, blank_y]
     elif move == 'down':
         board[blank_x, blank_y], board[blank_x - 1,
                                        blank_y] = board[blank_x - 1, blank_y], board[blank_x, blank_y]
