@@ -267,6 +267,37 @@ def make_move(board, move):
         board[blank_x, blank_y], board[blank_x - 1,
                                        blank_y] = board[blank_x - 1, blank_y], board[blank_x, blank_y]
 
+def order_board(board):
+    """
+        Given a board, transports the blank tile to the bottom right corner, with legal moves
+        (It changes the board)
+    """
+    blank_x, blank_y = get_blank_position(board)
+    #How many tiles we have to move the blank to the right
+    distance_from_right = NUM_OF_COLS - int(blank_x/NUM_OF_COLS) -1 
+    #How many tiles we have to move the blank to down
+    distance_from_bottom = NUM_OF_ROWS - int(blank_y/NUM_OF_ROWS) -1 
+    for i in range(distance_from_right):
+        make_move(board,'right')
+    for j in range(distance_from_bottom):
+        make_move(board,'down')
+    return board
+
+def solvable(board):
+    """
+        Determines whether a given board is solvable or not
+    """
+    ordered_board = [order_board(board)]
+
+    #Make a permutation out of the board
+    permutations = Permutation(list(ordered_board.reshape(1,NUM_OF_COLS*NUM_OF_ROWS))[0])
+
+    #The general rule for both EVEN number of columns and ODD number of column is,
+    #if the blank is in the bottom right corner, the number of inversions must be EVEN
+    solvable = permutations.inversions()%2 == 0
+    
+    return solvable
+
 
 if __name__ == '__main__':
     main()
