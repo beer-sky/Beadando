@@ -23,24 +23,25 @@ BASICFONTSIZE = 20
 # Colors
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
-BRIGHTBLUE = (0, 50, 255)
-DARKTURQUOISE = (3, 54, 73)
-GREEN = (0, 204, 0)
+IVORY = (255, 255, 240)
+SAND = (219, 213, 185)
+DARK_SAND = (192, 186, 153)
 
-BGCOLOR = DARKTURQUOISE
-TILECOLOR = GREEN
-TEXTCOLOR = WHITE
-BORDERCOLOR = BRIGHTBLUE
-BUTTONCOLOR = WHITE
+
+BGCOLOR = IVORY
+TILECOLOR = DARK_SAND
+TEXTCOLOR = BLACK
+BORDERCOLOR = BLACK
+BUTTONCOLOR = SAND
 BUTTONTEXTCOLOR = BLACK
-MESSAGECOLOR = WHITE
+MESSAGECOLOR = BLACK
 
 
 def main():
     '''
         Initialization based on the constants
     '''
-    global FPSCLOCK, DISPLAYSURF, BASICFONT
+    global msg, FPSCLOCK, DISPLAYSURF, BASICFONT, RESET_SURF, RESET_RECT, NEW_SURF, NEW_RECT, SOLVE_SURF, SOLVE_RECT
 
     pygame.init()
     FPSCLOCK = pygame.time.Clock()
@@ -48,14 +49,18 @@ def main():
     pygame.display.set_caption('Slide Puzzle')
     BASICFONT = pygame.font.Font('freesansbold.ttf', BASICFONTSIZE)
 
-    # Buttons TODO
-    # new
-    # solve
-    # reset
-    # exit
+    # Buttons
+    RESET_SURF, RESET_RECT = make_text(
+        'Reset', TEXTCOLOR, BUTTONCOLOR, WINDOWWIDTH - 120, WINDOWHEIGHT - 90)
+    NEW_SURF,   NEW_RECT = make_text(
+        'New Game', TEXTCOLOR, BUTTONCOLOR, WINDOWWIDTH - 120, WINDOWHEIGHT - 60)
+    SOLVE_SURF, SOLVE_RECT = make_text(
+        'Solve',    TEXTCOLOR, BUTTONCOLOR, WINDOWWIDTH - 120, WINDOWHEIGHT - 30)
 
+    # exit
     board = generate_new_puzzle()
     position = get_all_positions(board)
+    moves = []
     SOLVEDBOARD = np.arange(
         NUM_OF_COLS * NUM_OF_ROWS).reshape(NUM_OF_ROWS, NUM_OF_COLS)
     msg = 'Click tile or press arrow keys to slide.'
@@ -67,7 +72,7 @@ def main():
         if np.all(board == SOLVEDBOARD):
             msg = 'Congratulations!'
 
-        draw_board(board, msg)
+        draw_board(board)
 
         for event in pygame.event.get():  # Event loop
             if event.type == pygame.QUIT:
@@ -80,8 +85,21 @@ def main():
                     board, event.pos[0], event.pos[1])
 
                 if (tile_x, tile_y) == (None, None):  # If the user clicked on a button
-                    # TODO
-                    pass
+
+                    if RESET_RECT.collidepoint(event.pos):
+                        moves = reverse_moves(moves)
+                        for move in moves:
+                            make_move(board, position, move,
+                                      animation_speed=25)
+                        moves.clear()
+
+                    elif NEW_RECT.collidepoint(event.pos):
+                        board = generate_new_puzzle()
+                        position = get_all_positions(board)
+                        moves.clear()
+
+                    elif SOLVE_RECT.collidepoint(event.pos):
+                        moves.extend(solve_board(board, position))
 
                 else:  # If the clicked tile was next to the blank spot
                     blank_x, blank_y = get_position(board, BLANK)
@@ -95,13 +113,18 @@ def main():
                         slide_to = 'right'
 
             elif event.type == pygame.KEYDOWN:
-                # TODO
-                pass
+                if event.key == pygame.K_LEFT and is_valid_move(board, 'left'):
+                    slide_to = 'left'
+                elif event.key == pygame.K_RIGHT and is_valid_move(board, 'right'):
+                    slide_to = 'right'
+                elif event.key == pygame.K_UP and is_valid_move(board, 'up'):
+                    slide_to = 'up'
+                elif event.key == pygame.K_DOWN and is_valid_move(board, 'down'):
+                    slide_to = 'down'
 
         if slide_to:
+            moves.append(slide_to)
             make_move(board, position, slide_to)
-
-        first_rows(board, position)
 
         pygame.display.update()
         FPSCLOCK.tick(FPS)
@@ -161,7 +184,7 @@ def draw_tile(tile_x, tile_y, number, adj_x=0, adj_y=0):
     DISPLAYSURF.blit(text_surf, text_rect)
 
 
-def draw_board(board, msg):
+def draw_board(board):
     DISPLAYSURF.fill(BGCOLOR)
     text_suft, text_rect = make_text(msg, MESSAGECOLOR, BGCOLOR, 5, 5)
     DISPLAYSURF.blit(text_suft, text_rect)
@@ -179,7 +202,9 @@ def draw_board(board, msg):
     pygame.draw.rect(DISPLAYSURF, BORDERCOLOR,
                      (left-PADDING, top-PADDING, width + PADDING + RADIUS//2, height + PADDING + RADIUS//2), RADIUS)
 
-    # gombok kirajzolása TODO
+    DISPLAYSURF.blit(RESET_SURF, RESET_RECT)
+    DISPLAYSURF.blit(NEW_SURF, NEW_RECT)
+    DISPLAYSURF.blit(SOLVE_SURF, SOLVE_RECT)
 
 
 def get_tile_clicked(board, x, y):
@@ -215,12 +240,11 @@ def get_all_positions(board):
     return positions
 
 
-def slide_animation(board, direction, msg):
+def slide_animation(board, direction, speed):
     '''
         Animates a move.
         Does not check if the move is valid
     '''
-    ANIMATION_SPEED = 8
     blank_x, blank_y = get_position(board, BLANK)
 
     if direction == 'left':
@@ -232,35 +256,50 @@ def slide_animation(board, direction, msg):
     elif direction == 'down':
         move_x, move_y = blank_x - 1, blank_y
 
-    draw_board(board, msg)
+    draw_board(board)
     base_surf = DISPLAYSURF.copy()
     move_top, move_left = get_topleft_of_tile(move_x, move_y)
     pygame.draw.rect(base_surf, BGCOLOR, (move_left,
                      move_top, TILESIZE, TILESIZE))
 
-    for i in range(0, TILESIZE, ANIMATION_SPEED):
+    for i in range(0, TILESIZE, speed):
         # animate the tile sliding over
         # checkForQuit() TODO
         DISPLAYSURF.blit(base_surf, (0, 0))
         if direction == 'up':
             draw_tile(move_x, move_y, board[move_x, move_y], 0, -i)
-        if direction == 'down':
+        elif direction == 'down':
             draw_tile(move_x, move_y, board[move_x, move_y], 0, i)
-        if direction == 'left':
+        elif direction == 'left':
             draw_tile(move_x, move_y, board[move_x, move_y], -i, 0)
-        if direction == 'right':
+        elif direction == 'right':
             draw_tile(move_x, move_y, board[move_x, move_y], i, 0)
 
         pygame.display.update()
         FPSCLOCK.tick(FPS)
 
 
-def make_move(board, position, move, anim=True):
+def is_valid_move(board, move):
+    '''
+        return if a move is valid
+    '''
+    blank_x, blank_y = get_position(board, BLANK)
+
+    return (move == 'up' and blank_x != NUM_OF_ROWS-1) or \
+           (move == 'down' and blank_x != 0) or \
+           (move == 'left' and blank_y != NUM_OF_COLS-1) or \
+           (move == 'right' and blank_y != 0)
+
+
+def make_move(board, position, move, animation=True, animation_speed=8):
     '''
         Does not check if a move is valid
         changes board and position
         returns the move
     '''
+    if animation:
+        slide_animation(board, move, animation_speed)
+
     blank_x, blank_y = get_position(board, BLANK)
 
     match move:
@@ -273,18 +312,23 @@ def make_move(board, position, move, anim=True):
         case 'down':
             new_x, new_y = blank_x - 1, blank_y
 
-    if anim:
-        slide_animation(board, move, "asd")
-
     swapped_num = board[new_x, new_y]
     position[BLANK], position[swapped_num] = position[swapped_num], position[BLANK]
     board[blank_x, blank_y], board[new_x,
                                    new_y] = board[new_x, new_y], board[blank_x, blank_y]
 
-    # print("move: ", move, " swapped: ", swapped_num)
-    # print("blank pos: ", position[BLANK])
-    # print("new_pos: ", position[swapped_num])
     return move
+
+
+def reverse_moves(moves):
+    opposite_moves = {'left': 'right',
+                      'right': 'left',
+                      'up': 'down',
+                      'down': 'up'}
+
+    reversed = [opposite_moves[move] for move in moves]
+    reversed.reverse()
+    return reversed
 
 
 def order_board(original_board, original_position):
@@ -403,7 +447,6 @@ def first_rows(board, position):
     moves = []
 
     for i, j in product(list(range(NUM_OF_ROWS-2)), list(range(NUM_OF_COLS))):
-        print(i, j)
         # az (i,j) helyre próbáljuk a megfelelő tile-t vinni
 
         if j < NUM_OF_COLS-2:  # ha nem az utolsó két oszlop
@@ -437,6 +480,14 @@ def first_rows(board, position):
             moves.extend(move_tile_to(board, position, tile, i+1, j-1))
             moves.extend(move_tile_to(board, position,
                          tile, i, position[tile][1]))
+
+    return moves
+
+
+def solve_board(board, position):  # TODO
+    moves = []
+
+    moves.extend(first_rows(board, position))
 
     return moves
 
