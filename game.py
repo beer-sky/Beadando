@@ -4,15 +4,20 @@
 
 import pygame
 import numpy as np
+import sys
 from PIL import Image
 from sympy.combinatorics.permutations import Permutation
 from itertools import product
+from sys import argv
+from getopt import getopt
 
 
-# Create the constants
+# These may change during initialization
 NUM_OF_COLS = 4
 NUM_OF_ROWS = 4
-BLANK = NUM_OF_COLS * NUM_OF_ROWS - 1
+BLANK = 16
+
+# Create the constants
 TILESIZE = 80
 WINDOWWIDTH = 1280
 WINDOWHEIGHT = 720
@@ -36,25 +41,25 @@ BORDERCOLOR = BLACK
 BUTTONCOLOR = SAND
 BUTTONTEXTCOLOR = BLACK
 MESSAGECOLOR = BLACK
+DEFAULT_IMAGE = "dino.gif"
 
 
 def main():
     '''
         Initialization based on the constants
     '''
-    global msg, if_image, FPSCLOCK, DISPLAYSURF, BASICFONT, RESET_SURF, RESET_RECT, NEW_SURF, NEW_RECT, SOLVE_SURF, SOLVE_RECT, IMAGES
+    global msg, show_image, show_number, \
+        FPSCLOCK, DISPLAYSURF, BASICFONT, IMAGES, NUM_OF_ROWS, NUM_OF_COLS, \
+        RESET_SURF, RESET_RECT, NEW_SURF, NEW_RECT, SOLVE_SURF, SOLVE_RECT
 
+    # Initialization for the game
     pygame.init()
     FPSCLOCK = pygame.time.Clock()
     DISPLAYSURF = pygame.display.set_mode((WINDOWWIDTH, WINDOWHEIGHT))
     pygame.display.set_caption('Slide Puzzle')
     BASICFONT = pygame.font.Font('freesansbold.ttf', BASICFONTSIZE)
-
-    # Image TODO
-    IMAGES = process_image()
-    if_image = True
-
-    # Board TODO
+    show_image = False
+    show_number = False
 
     # Buttons
     RESET_SURF, RESET_RECT = make_text(
@@ -64,13 +69,43 @@ def main():
     SOLVE_SURF, SOLVE_RECT = make_text(
         'Solve',    TEXTCOLOR, BUTTONCOLOR, WINDOWWIDTH - 120, WINDOWHEIGHT - 30)
 
-    # exit
-    board = generate_new_puzzle()
+    board = None
+
+    # check for command line arguments:
+    arg = argv[1:]
+    opts, _ = getopt(arg, "b:d:i:s:n:", [
+                     "board=", "dimensions=" "image=", "source=", "shownumber="])
+    for opt, val in opts:
+        # Make the game board
+        if opt in ("--board", "-s"):
+            board = np.genfromtxt(val, delimiter=',')
+        elif opt in ("--dimensions", "-d"):
+            NUM_OF_ROWS, NUM_OF_COLS = tuple(map(int, val.split(',')))
+
+        # Get the image
+        if opt in ("--image", "-i"):
+            show_image = True if val == 'True' else 'False'
+
+        if opt in ("--source", "-s"):
+            IMAGES = process_image(opt)
+        elif show_image:
+            IMAGES = process_image(DEFAULT_IMAGE)
+
+        if opt in ("--shownumber", "-n"):
+            show_number = opt
+
+    if board is None:
+        board = generate_new_puzzle()
+
     position = get_all_positions(board)
     moves = []
+    msg = 'Click tile or press arrow keys to slide.'
+    solvable = if_solvable(board, position)
+    if not solvable:
+        msg = 'This board is not solvable!\nClick tile or press arrow keys to slide.'
+
     SOLVEDBOARD = np.arange(
         NUM_OF_COLS * NUM_OF_ROWS).reshape(NUM_OF_ROWS, NUM_OF_COLS)
-    msg = 'Click tile or press arrow keys to slide.'
     run = True
 
     while run:    # Main game loop
@@ -85,7 +120,7 @@ def main():
             if event.type == pygame.QUIT:
                 run = False
                 pygame.quit()
-                exit()
+                sys.exit()
 
             if event.type == pygame.MOUSEBUTTONDOWN:
                 tile_x, tile_y = get_tile_clicked(
@@ -106,10 +141,11 @@ def main():
                         moves.clear()
 
                     elif SOLVE_RECT.collidepoint(event.pos):
-                        moves.extend(solve_board(board, position))
+                        if solvable:
+                            moves.extend(solve_board(board, position))
 
                 else:  # If the clicked tile was next to the blank spot
-                    blank_x, blank_y = get_position(board, BLANK)
+                    blank_x, blank_y = position[BLANK]
                     if tile_x == blank_x + 1 and tile_y == blank_y:
                         slide_to = 'up'
                     elif tile_x == blank_x - 1 and tile_y == blank_y:
@@ -120,13 +156,13 @@ def main():
                         slide_to = 'right'
 
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_LEFT and is_valid_move(board, 'left'):
+                if event.key == pygame.K_LEFT and is_valid_move(position, 'left'):
                     slide_to = 'left'
-                elif event.key == pygame.K_RIGHT and is_valid_move(board, 'right'):
+                elif event.key == pygame.K_RIGHT and is_valid_move(position, 'right'):
                     slide_to = 'right'
-                elif event.key == pygame.K_UP and is_valid_move(board, 'up'):
+                elif event.key == pygame.K_UP and is_valid_move(position, 'up'):
                     slide_to = 'up'
-                elif event.key == pygame.K_DOWN and is_valid_move(board, 'down'):
+                elif event.key == pygame.K_DOWN and is_valid_move(position, 'down'):
                     slide_to = 'down'
 
         if slide_to:
@@ -137,7 +173,7 @@ def main():
         FPSCLOCK.tick(FPS)
 
 
-def process_image(image_source='dino.gif'):
+def process_image(image_source):
     img = Image.open(image_source)
     img = img.rotate(90)
     height = NUM_OF_COLS * TILESIZE
@@ -164,10 +200,12 @@ def generate_new_puzzle():
         ]
         where the last element is always the BLANK
     '''
+    global BLANK
     perm = Permutation.random(NUM_OF_ROWS * NUM_OF_COLS - 1)
     while Permutation.parity(perm):
         perm = Permutation.random(NUM_OF_ROWS * NUM_OF_COLS - 1)
     perm_list = list(perm)
+    BLANK = NUM_OF_COLS * NUM_OF_ROWS - 1
     perm_list.append(BLANK)
     return np.array(perm_list, dtype='int32').reshape(NUM_OF_ROWS, NUM_OF_COLS)
 
@@ -197,13 +235,16 @@ def draw_tile(tile_x, tile_y, number, adj_x=0, adj_y=0):
         adj_x and adj_y is for animating
         they are small distances in the direction of the corresponding axles
     '''
-    global if_image
+
+    global show_image, show_number
+
     top, left = get_topleft_of_tile(tile_x, tile_y)
     pygame.draw.rect(DISPLAYSURF, TILECOLOR,
                      (left + adj_x, top + adj_y, TILESIZE, TILESIZE))
-    if if_image:
+
+    if show_image:
         DISPLAYSURF.blit(IMAGES[number], (left + adj_x, top+adj_y))
-        if False:  # Kirakást segítő, ráírjuk a számokat a képre
+        if show_number:
             text_surf = BASICFONT.render(str(number), True, TEXTCOLOR)
             text_rect = text_surf.get_rect(
                 center=(left + TILESIZE//2 + adj_x, top + TILESIZE//2 + adj_y))
@@ -218,7 +259,7 @@ def draw_tile(tile_x, tile_y, number, adj_x=0, adj_y=0):
 
 def draw_board(board):
     DISPLAYSURF.fill(BGCOLOR)
-    text_suft, text_rect = make_text(msg, MESSAGECOLOR, BGCOLOR, 5, 5)
+    text_suft, text_rect = make_text(msg, MESSAGECOLOR, BGCOLOR, 10, 10)
     DISPLAYSURF.blit(text_suft, text_rect)
 
     for coordinates in product(list(range(NUM_OF_ROWS)), list(range(NUM_OF_COLS))):
@@ -252,16 +293,6 @@ def get_tile_clicked(board, x, y):
     return (None, None)
 
 
-def get_position(board, number):
-    '''
-        Return the x and y board coordinates of the blank space
-    '''
-
-    for index, x in np.ndenumerate(board):
-        if x == number:
-            return index
-
-
 def get_all_positions(board):
     '''
         return a list. i_th element is the coordinates of number i in the board.
@@ -272,12 +303,12 @@ def get_all_positions(board):
     return positions
 
 
-def slide_animation(board, direction, speed):
+def slide_animation(board, position, direction, speed):
     '''
         Animates a move.
         Does not check if the move is valid
     '''
-    blank_x, blank_y = get_position(board, BLANK)
+    blank_x, blank_y = position[BLANK]
 
     if direction == 'left':
         move_x, move_y = blank_x, blank_y + 1
@@ -296,7 +327,7 @@ def slide_animation(board, direction, speed):
 
     for i in range(0, TILESIZE, speed):
         # animate the tile sliding over
-        # check_for_quit() TODO
+        check_for_quit()
         DISPLAYSURF.blit(base_surf, (0, 0))
 
         if direction == 'up':
@@ -312,11 +343,22 @@ def slide_animation(board, direction, speed):
         FPSCLOCK.tick(FPS)
 
 
-def is_valid_move(board, move):
+def check_for_quit():
+    for event in pygame.event.get(pygame.QUIT):  # get all the QUIT events
+        pygame.quit()
+        sys.exit()
+    for event in pygame.event.get(pygame.KEYDOWN):  # get all the KEYUP events
+        if event.key == pygame.K_ESCAPE:
+            pygame.quit()
+            sys.exit()
+        pygame.event.post(event)  # put the other KEYUP event objects back
+
+
+def is_valid_move(position, move):
     '''
         return if a move is valid
     '''
-    blank_x, blank_y = get_position(board, BLANK)
+    blank_x, blank_y = position[BLANK]
 
     return (move == 'up' and blank_x != NUM_OF_ROWS-1) or \
         (move == 'down' and blank_x != 0) or \
@@ -332,9 +374,9 @@ def make_move(board, position, move, animation=True, animation_speed=8):
         returns the move
     '''
     if animation:
-        slide_animation(board, move, animation_speed)
+        slide_animation(board, position, move, animation_speed)
 
-    blank_x, blank_y = get_position(board, BLANK)
+    blank_x, blank_y = position[BLANK]
 
     if move == 'left':
         new_x, new_y = blank_x, blank_y + 1
@@ -366,35 +408,25 @@ def reverse_moves(moves):
 
 def order_board(original_board, original_position):
     '''
-        Given a board, transports the blank tile to the bottom right corner, with legal moves
+        Given a board, make a copy of is.
+        Moves the blank tile to the bottom right corner with legal moves
+        return ordered board
     '''
     board = np.copy(original_board)
     position = list.copy(original_position)
-
-    blank_x, blank_y = get_position(board, BLANK)
-    # How many tiles we have to move the blank to the right
-    distance_from_right = NUM_OF_COLS - int(blank_x/NUM_OF_COLS) - 1
-    # How many tiles we have to move the blank to down
-    distance_from_bottom = NUM_OF_ROWS - int(blank_y/NUM_OF_ROWS) - 1
-    for i in range(distance_from_right):
-        make_move(board, position, 'right')
-    for j in range(distance_from_bottom):
-        make_move(board, position, 'down')
+    while position[BLANK][0] != NUM_OF_ROWS-1:
+        make_move(board, position, 'up', animation=False)
+    while position[BLANK][1] != NUM_OF_COLS-1:
+        make_move(board, position, 'left', animation=False)
     return board
 
 
-def solvable(board):
+def if_solvable(board, position):
     '''
         Determines whether a given board is solvable or not
     '''
-    ordered_board = [order_board(board)]
-
-   # Make a permutation out of the board
-    permutations = Permutation(
-        list(ordered_board.reshape(1, NUM_OF_COLS*NUM_OF_ROWS))[0])
-
-    # The general rule for both EVEN number of columns and ODD number of column is,
-    # if the blank is in the bottom right corner, the number of inversions must be EVEN
+    ordered_board = order_board(board, position)
+    permutations = Permutation(ordered_board.flatten())
 
     return (Permutation.parity(permutations) == 0)
 
@@ -404,14 +436,14 @@ def move_blank_to(board, position, x, y):
         Moves BLANK to the given coordinate: x,y
     '''
     moves = []
-    # sorban mozgat
+    # Moves in lines
     while position[BLANK][1] != y:
         if position[BLANK][1] < y:
             moves.append(make_move(board, position, 'left'))
         else:
             moves.append(make_move(board, position, 'right'))
 
-    # oszlopban mozgat
+    # Moves in columns
     while position[BLANK][0] != x:
         if position[BLANK][0] < x:
             moves.append(make_move(board, position, 'up'))
@@ -428,8 +460,9 @@ def move_tile_to(board, position, tile, x, y):
             if not necessary.
     '''
     moves = []
-    # sorban mozgat
-    if position[tile][0] == NUM_OF_ROWS-1:  # Ha utolsó sorban van, kihozzuk
+
+    # Moves in lines
+    if position[tile][0] == NUM_OF_ROWS-1:  # If in the last row, take it out
         moves.extend(move_blank_to(board, position, NUM_OF_ROWS -
                                    2, position[BLANK][1]))
         moves.extend(move_blank_to(board, position,
@@ -448,13 +481,13 @@ def move_tile_to(board, position, tile, x, y):
                 board, position, position[tile][0], position[tile][1]-1))
             moves.append(make_move(board, position, 'left'))
 
-    # ha ugyanabban a sorban van a BLANK mint a tile akkor elromolna
+    # If the BLANK and tile would be in the same row, it would get wrong
     if position[tile][0] == position[BLANK][0] and position[tile][1] > position[BLANK][1]:
         moves.extend(move_blank_to(board, position,
                                    position[tile][0]+1, position[BLANK][1]))
 
-    # oszlopban mozgat
-    if position[tile][1] == NUM_OF_COLS-1:  # kihozzuk az utolsó oszlopból, ha ott van
+    # Moves in Column
+    if position[tile][1] == NUM_OF_COLS-1:  # If in the last co, take it out
         moves.extend(move_blank_to(board, position,
                                    position[BLANK][0], NUM_OF_COLS-2))
         moves.extend(move_blank_to(board, position,
@@ -480,27 +513,30 @@ def first_rows(board, position):
     moves = []
 
     for i, j in product(list(range(NUM_OF_ROWS-2)), list(range(NUM_OF_COLS))):
-        # az (i,j) helyre próbáljuk a megfelelő tile-t vinni
+        # Tries to move the correct tile into (i,j)
 
-        if j < NUM_OF_COLS-2:  # ha nem az utolsó két oszlop
+        if j < NUM_OF_COLS-2:  # if not the last 2 columns
             tile = i*NUM_OF_COLS+j
             moves.extend(move_tile_to(board, position, tile, i, j))
 
-        elif j == NUM_OF_COLS-2:  # ha az utolsó előtti oszlop: oda visszük az utolsó oszlop elemét
+        # If the col before the last: we take here the last element
+        elif j == NUM_OF_COLS-2:
             tile = i*NUM_OF_COLS+j+1
-            # ha mellette van a utolsó előtti elem beragadnánk
+
+            # If the last would be next to it, we woult get stucked
             if board[i][j] == i*NUM_OF_COLS+j:
                 moves.extend(move_blank_to(board, position, i, j))
                 moves.append(make_move(board, position, 'left'))
             moves.extend(move_tile_to(board, position, tile, i, j))
 
-        else:  # utolsó oszlop
-            # utolsó előtti elemet elvisszük a helyére, közben utolsó elem is jó helyére kerül
+        else:  # Last column
+            # We take the elements before the last to their place,
+            # The last element will go to its place automatically
             tile = i*NUM_OF_COLS+j-1
-            if position[BLANK] == (i, j):  # ezt oldja meg: 0 1 3 15
+            if position[BLANK] == (i, j):  # Solves: 0 1 3 15
                 #  * * * 2
                 moves.append(make_move(board, position, 'up'))
-            if position[tile] == (i, j):  # megoldja ha a sorrend 0 1 3 2
+            if position[tile] == (i, j):  # Solves if the order: 0 1 3 2
                 moves.extend(move_blank_to(board, position, i, j-1))
 
                 moves_to_do = ['left', 'up', 'up',
@@ -517,9 +553,11 @@ def first_rows(board, position):
 
 
 def solve_board(board, position):  # TODO
-    moves = []
+    '''
+        Solve the puzzle
+    '''
 
-    moves.extend(first_rows(board, position))
+    moves = (first_rows(board, position))
 
     return moves
 
