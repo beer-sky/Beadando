@@ -15,7 +15,7 @@ from getopt import getopt
 # These may change during initialization
 NUM_OF_COLS = 4
 NUM_OF_ROWS = 4
-BLANK = 16
+BLANK = 15
 
 # Create the constants
 TILESIZE = 80
@@ -49,7 +49,7 @@ def main():
         Initialization based on the constants
     '''
     global msg, show_image, show_number, \
-        FPSCLOCK, DISPLAYSURF, BASICFONT, IMAGES, NUM_OF_ROWS, NUM_OF_COLS, \
+        FPSCLOCK, DISPLAYSURF, BASICFONT, IMAGES, NUM_OF_ROWS, NUM_OF_COLS, BLANK, \
         RESET_SURF, RESET_RECT, NEW_SURF, NEW_RECT, SOLVE_SURF, SOLVE_RECT
 
     # Initialization for the game
@@ -74,25 +74,27 @@ def main():
     # check for command line arguments:
     arg = argv[1:]
     opts, _ = getopt(arg, "b:d:i:s:n:", [
-                     "board=", "dimensions=" "image=", "source=", "shownumber="])
+                     "board=", "dimensions=", "image=", "source=", "shownumber="])
     for opt, val in opts:
         # Make the game board
         if opt in ("--board", "-s"):
-            board = np.genfromtxt(val, delimiter=',')
+            board = np.genfromtxt(val, delimiter=',', dtype=int)
+            NUM_OF_ROWS, NUM_OF_COLS = np.shape(board)
         elif opt in ("--dimensions", "-d"):
             NUM_OF_ROWS, NUM_OF_COLS = tuple(map(int, val.split(',')))
+        BLANK = NUM_OF_COLS * NUM_OF_ROWS - 1
 
         # Get the image
         if opt in ("--image", "-i"):
-            show_image = True if val == 'True' else 'False'
+            show_image = True if val == 'True' else False
 
         if opt in ("--source", "-s"):
-            IMAGES = process_image(opt)
+            IMAGES = process_image(val)
         elif show_image:
             IMAGES = process_image(DEFAULT_IMAGE)
 
         if opt in ("--shownumber", "-n"):
-            show_number = opt
+            show_number = True if val == 'True' else False
 
     if board is None:
         board = generate_new_puzzle()
@@ -102,7 +104,7 @@ def main():
     msg = 'Click tile or press arrow keys to slide.'
     solvable = if_solvable(board, position)
     if not solvable:
-        msg = 'This board is not solvable!\nClick tile or press arrow keys to slide.'
+        msg = 'This board is not solvable! Click tile or press arrow keys to slide.'
 
     SOLVEDBOARD = np.arange(
         NUM_OF_COLS * NUM_OF_ROWS).reshape(NUM_OF_ROWS, NUM_OF_COLS)
@@ -138,6 +140,8 @@ def main():
                     elif NEW_RECT.collidepoint(event.pos):
                         board = generate_new_puzzle()
                         position = get_all_positions(board)
+                        msg = 'Click tile or press arrow keys to slide.'
+                        solvable = True
                         moves.clear()
 
                     elif SOLVE_RECT.collidepoint(event.pos):
@@ -200,12 +204,10 @@ def generate_new_puzzle():
         ]
         where the last element is always the BLANK
     '''
-    global BLANK
     perm = Permutation.random(NUM_OF_ROWS * NUM_OF_COLS - 1)
     while Permutation.parity(perm):
         perm = Permutation.random(NUM_OF_ROWS * NUM_OF_COLS - 1)
     perm_list = list(perm)
-    BLANK = NUM_OF_COLS * NUM_OF_ROWS - 1
     perm_list.append(BLANK)
     return np.array(perm_list, dtype='int32').reshape(NUM_OF_ROWS, NUM_OF_COLS)
 
