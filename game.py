@@ -553,6 +553,110 @@ def first_rows(board, position):
 
     return moves
 
+def swap_in_col(board,positions):
+    moves = []
+    moves_to_do= ['right','up','left','left','down','right','right','up','left','down',
+            'right','up','left','left','down','right','up','left','down'
+            ,'right','right','up','left','down']
+    for move in moves_to_do:
+                    moves.append(make_move(board, positions, move))
+    return moves
+
+def do_movelist(board,positions,movelist):
+    """
+        Executes a movelist
+    """
+    moves = []
+    for move in movelist:
+                    moves.append(make_move(board, positions, move))
+    return moves
+
+def rotate_in_bottom_square(board,positions,tile):
+    moves = []
+    if positions[tile] == (NUM_OF_ROWS-1, NUM_OF_COLS-2):
+        moves.append(make_move(board,positions,'up'))
+    elif positions[tile] == (NUM_OF_ROWS-1, NUM_OF_COLS-1):
+        moves_to_do = ['left','up','right','down','left']
+        moves.extend(do_movelist(board,positions,moves_to_do))
+    else:
+        moves.append(make_move(board,positions,'left'))
+    return moves
+
+def order_66(board,positions):
+    moves = []
+    moves.extend(move_blank_to(board, positions,NUM_OF_ROWS-1, positions[BLANK][1]))
+    moves.extend(move_blank_to(board, positions, NUM_OF_ROWS-1, NUM_OF_COLS-3))
+    moves.extend(do_movelist(board, positions, ['down','left']))
+    return moves
+
+def last_rows(board, positions):
+    """
+        Solves the last rows of the puzzle
+    """
+    moves = []
+    
+    #We will start from the left side, and do a column in one run
+    for j in range(NUM_OF_ROWS-3):
+        #The two number we will be working with
+        tile_upper = (NUM_OF_ROWS-2) * NUM_OF_COLS + j 
+        tile_below = (NUM_OF_ROWS-1) * NUM_OF_COLS + j 
+
+        #We take the bottom tile and make it the "top right corner" in the unfinished part
+        moves.extend(move_tile_to(board,positions, tile_below, NUM_OF_ROWS-2, j))
+        moves.extend(move_blank_to(board,positions,NUM_OF_ROWS-2, j+1))
+
+        #A series of moves, to swap the two tile, if they are
+            #under each other, in the wrong order
+        if positions[tile_upper] == (NUM_OF_ROWS-1, j):
+            moves.extend(swap_in_col(board, positions))
+        else:
+            #This finishes the column
+            moves.extend(move_tile_to(board,positions, tile_upper, 
+                            NUM_OF_ROWS-2,j+1))
+            moves.extend(move_blank_to(board, positions, 
+                            NUM_OF_ROWS-1, positions[BLANK][0]))
+            moves.extend(move_blank_to(board, positions, 
+                            NUM_OF_ROWS-1, j))
+            moves.extend(do_movelist(board,positions,['down','left']))
+    
+    #Last six tile
+    #The N-2. column
+    tile_upper = (NUM_OF_ROWS-2) * NUM_OF_COLS + NUM_OF_COLS -3
+    tile_below = (NUM_OF_ROWS-1) * NUM_OF_COLS + NUM_OF_COLS -3
+
+    #The bottom in the column top left corner, and the BLANK on the right of it
+    moves.extend(move_tile_to(board,positions,tile_below, 
+                    NUM_OF_ROWS-2, NUM_OF_COLS-3 ))
+    moves.extend(move_blank_to(board,positions, 
+                    NUM_OF_ROWS-2, NUM_OF_COLS-2))
+
+    if positions[tile_upper] == (NUM_OF_ROWS-1, NUM_OF_COLS-3):
+         #if they are under each other, we can swap them
+        moves.extend(swap_in_col(board,positions))
+        #moves the upper tile, to the right of the bottom one
+    elif positions[tile_upper] == (NUM_OF_ROWS-1, NUM_OF_COLS-2):
+        moves.append(make_move(board,positions,'up'))
+        moves.extend(order_66(board,positions))
+
+    elif positions[tile_upper] == (NUM_OF_ROWS-1, NUM_OF_COLS-1):
+        moves_to_do = ['left','up','right','down','left']
+        moves.extend(do_movelist(board,positions,moves_to_do))
+        moves.extend(order_66(board,positions))
+    else:
+        moves.append(make_move(board,positions,'left'))
+        moves.extend(order_66(board,positions))
+
+    #sorting out what to do with the last four
+    tile_upper = (NUM_OF_ROWS-2) * NUM_OF_COLS + NUM_OF_COLS -2
+    if positions[tile_upper] == (NUM_OF_ROWS-1, NUM_OF_COLS -2):
+        moves_to_do = ['up','left']
+    elif positions[tile_upper] == (NUM_OF_ROWS-1, NUM_OF_COLS -1):
+        moves_to_do = ['left','up','right','down','left','up']
+    else:
+        moves_to_do = ['right','up'] 
+    moves.extend(do_movelist(board, positions, moves_to_do))
+
+    return moves
 
 def solve_board(board, position):  # TODO
     '''
@@ -560,7 +664,7 @@ def solve_board(board, position):  # TODO
     '''
 
     moves = (first_rows(board, position))
-
+    moves = (last_rows(board, position))
     return moves
 
 
