@@ -571,6 +571,9 @@ def swap_in_col(board, positions) -> list:
 
 
 def rotate_in_bottom_square(board, positions, tile):
+    """
+        Given an array of moves, the functions executes the moves
+    """
     moves = []
     if positions[tile] == (NUM_OF_ROWS-1, NUM_OF_COLS-2):
         moves.append(make_move(board, positions, 'up'))
@@ -583,6 +586,9 @@ def rotate_in_bottom_square(board, positions, tile):
 
 
 def order_66(board, positions):
+    """
+        Finishes the M-3. column
+    """
     moves = []
     moves.extend(move_blank_to(board, positions,
                  NUM_OF_ROWS-1, positions[BLANK][1]))
@@ -593,70 +599,98 @@ def order_66(board, positions):
 
 def last_rows(board, positions):
     """
-        Solves the last rows of the puzzle
+        Solves the last rows of the puzzle for, N*M size puzzle
+        (Solves a 2*M, within the 2*M box)
     """
     moves = []
 
-    # We will start from the left side, and do a column in one run
+    # We will start from the left side, and do a column in one loop 
     for j in range(NUM_OF_COLS-3):
-        # The two number we will be working with
-        tile_upper = (NUM_OF_ROWS-2) * NUM_OF_COLS + j
-        tile_below = (NUM_OF_ROWS-1) * NUM_OF_COLS + j
 
-        # We take the bottom tile and make it the "top right corner" in the unfinished part
+        # The two number we will be working with, in the solved state tile_upper supposed to
+        # be on the top of tile_below (this is for positions array)
+        tile_upper = (NUM_OF_ROWS-2) * NUM_OF_COLS + j     #tile (N-1, j+1)
+        tile_below = (NUM_OF_ROWS-1) * NUM_OF_COLS + j     #tile ( N , j+1)
+
+        # Completing the j.-th column consists of 3 steps:
+        # 1. Move the "below" tile to coordinates (N-1 , j) (The N-1.th row, and j.-th column)
+        # 2. Check whether the "upper" tile is below the "below" tile 
+        #       - In this case, there is a series of steps, to put them in order
+        # 3. If not, then move the "upper" tile to the right of "below"
+        # 4. Move the BLANK under "below", then you can just do a "down" and "left" move and
+        #      the column will be completed (when moving BLANKn we dont disturb "below" and "upper")
+        #   ROWS\COL         i                                i
+        #   (N-1)   [ DONE |          ]     1.      [ DONE |"below"       ]     3.
+        #   (N  )   [ DONE |          ]   ------>   [ DONE |              ]  -------> 
+        #                      i
+        #   (N-1)   [ DONE |"below" "upper"]     4.      [ DONE |"below" "upper"]    4,5.
+        #   (N  )   [ DONE |               ]   ------>   [ DONE | BLANK         ]  ------->
+        #           
+        #   (N-1)   [ DONE |"upper"  BLANK ] 
+        #   (N  )   [ DONE |"below"        ] 
+        #
+        #   If, after the first step, "upper" is below "below", we can get to the end in one step
+
+        # 1. Move the "below" tile to coordinates (N-1 , j) (The N-1.th row, and j.-th column)
         moves.extend(move_tile_to(board, positions,
                      tile_below, NUM_OF_ROWS-2, j))
         moves.extend(move_blank_to(board, positions, NUM_OF_ROWS-2, j+1))
 
-        # A series of moves, to swap the two tile, if they are
-        # under each other, in the wrong order
+        # 2. If "upper" is below "below" we can just swap them
         if positions[tile_upper] == (NUM_OF_ROWS-1, j):
             moves.extend(swap_in_col(board, positions))
         else:
-            # This finishes the column
+            # 3. else move the "upper" tile to the right of "below"
             moves.extend(move_tile_to(board, positions, tile_upper,
                                       NUM_OF_ROWS-2, j+1))
+            # move BLANK below "below" (first to the N.-th column, then below "below")
             moves.extend(move_blank_to(board, positions,
                                        NUM_OF_ROWS-1, positions[BLANK][0]))
             moves.extend(move_blank_to(board, positions,
                                        NUM_OF_ROWS-1, j))
+            # make a "down" and a "left" move, to finish the column
             moves.extend(do_movelist(board, positions, ['down', 'left']))
 
     # Last six tile
-    # The N-2. column
-    tile_upper = (NUM_OF_ROWS-2) * NUM_OF_COLS + NUM_OF_COLS - 3
-    tile_below = (NUM_OF_ROWS-1) * NUM_OF_COLS + NUM_OF_COLS - 3
+    # The N-2.th column
+    tile_upper = (NUM_OF_ROWS-2) * NUM_OF_COLS + NUM_OF_COLS - 3     #tile (N-1, N-2)
+    tile_below = (NUM_OF_ROWS-1) * NUM_OF_COLS + NUM_OF_COLS - 3     #tile ( N , N-2)
 
-    # The bottom in the column top left corner, and the BLANK on the right of it
+    # Move the "below" tile to (N-1, M-2)  
     moves.extend(move_tile_to(board, positions, tile_below,
                               NUM_OF_ROWS-2, NUM_OF_COLS-3))
+    # Move BLANK to (N-1, M-1)
     moves.extend(move_blank_to(board, positions,
                                NUM_OF_ROWS-2, NUM_OF_COLS-2))
 
+    # if "upper" is below "below" we can swap
     if positions[tile_upper] == (NUM_OF_ROWS-1, NUM_OF_COLS-3):
-        # if they are under each other, we can swap them
         moves.extend(swap_in_col(board, positions))
-        # moves the upper tile, to the right of the bottom one
+    # if not, then we move the "upper" tile beside "below" tile, then finish the column
+    # for different poitions, we need different moves to move th "upper" tile
     elif positions[tile_upper] == (NUM_OF_ROWS-1, NUM_OF_COLS-2):
         moves.append(make_move(board, positions, 'up'))
         moves.extend(order_66(board, positions))
-
     elif positions[tile_upper] == (NUM_OF_ROWS-1, NUM_OF_COLS-1):
         moves_to_do = ['left', 'up', 'right', 'down', 'left']
         moves.extend(do_movelist(board, positions, moves_to_do))
         moves.extend(order_66(board, positions))
     else:
+        print(f'ide gyüttem be')
         moves.append(make_move(board, positions, 'left'))
         moves.extend(order_66(board, positions))
-
-    # sorting out what to do with the last four
-    tile_upper = (NUM_OF_ROWS-2) * NUM_OF_COLS + NUM_OF_COLS - 2
+    print(f'{tile_upper} and {tile_below} are ready')
+    # Order 66, garanties that the BLANK will finish on (N-1,M-1)
+    tile_upper = (NUM_OF_ROWS-2) * NUM_OF_COLS + NUM_OF_COLS - 2    #tile (N-1, M-1)
+    moves_to_do = []
+    # Sorting out how to move the (N-1,N-1) tile to its place, and finish the puzzle  
     if positions[tile_upper] == (NUM_OF_ROWS-1, NUM_OF_COLS - 2):
-        moves_to_do = ['up', 'left']
+        moves_to_do = ['up','left']
     elif positions[tile_upper] == (NUM_OF_ROWS-1, NUM_OF_COLS - 1):
         moves_to_do = ['left', 'up', 'right', 'down', 'left', 'up']
     else:
-        moves_to_do = ['right', 'up']
+        moves_to_do = ['left', 'up']
+    print(f'moves: {moves_to_do}')
     moves.extend(do_movelist(board, positions, moves_to_do))
 
     return moves
