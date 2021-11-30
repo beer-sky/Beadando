@@ -15,7 +15,7 @@ from getopt import getopt
 # These may change during initialization
 NUM_OF_COLS = 4
 NUM_OF_ROWS = 4
-BLANK = 15
+BLANK = NUM_OF_COLS * NUM_OF_ROWS - 1
 
 # Create the constants
 TILESIZE = 80
@@ -70,6 +70,7 @@ def main():
         'Solve',    TEXTCOLOR, BUTTONCOLOR, WINDOWWIDTH - 120, WINDOWHEIGHT - 30)
 
     board = None
+    image_source = DEFAULT_IMAGE
 
     # check for command line arguments:
     arg = argv[1:]
@@ -77,10 +78,10 @@ def main():
                      "board=", "dimensions=", "image=", "source=", "shownumber="])
     for opt, val in opts:
         # Make the game board
-        if opt in ("--board", "-s"):
+        if opt in ("--board", "-b"):
             board = np.genfromtxt(val, delimiter=',', dtype=int)
             NUM_OF_ROWS, NUM_OF_COLS = np.shape(board)
-        elif opt in ("--dimensions", "-d"):
+        elif opt in ("--dimensions", "-d") and board is None:
             NUM_OF_ROWS, NUM_OF_COLS = tuple(map(int, val.split(',')))
         BLANK = NUM_OF_COLS * NUM_OF_ROWS - 1
 
@@ -89,15 +90,16 @@ def main():
             show_image = True if val == 'True' else False
 
         if opt in ("--source", "-s"):
-            IMAGES = process_image(val)
-        elif show_image:
-            IMAGES = process_image(DEFAULT_IMAGE)
+            image_source = val
 
         if opt in ("--shownumber", "-n"):
             show_number = True if val == 'True' else False
 
     if board is None:
         board = generate_new_puzzle()
+
+    # we need to know the dimensions first for IMAGE
+    IMAGES = process_image(image_source)
 
     position = get_all_positions(board)
     moves = []
@@ -130,22 +132,25 @@ def main():
 
                 if (tile_x, tile_y) == (None, None):  # If the user clicked on a button
 
-                    if RESET_RECT.collidepoint(event.pos):
+                    if RESET_RECT.collidepoint(event.pos):  # Reset button
                         moves = reverse_moves(moves)
                         do_movelist(board, position, moves, animation_speed=24)
                         moves.clear()
 
-                    elif NEW_RECT.collidepoint(event.pos):
+                    elif NEW_RECT.collidepoint(event.pos):  # New game button
                         board = generate_new_puzzle()
                         position = get_all_positions(board)
                         msg = 'Click tile or press arrow keys to slide.'
                         solvable = True
                         moves.clear()
 
-                    elif SOLVE_RECT.collidepoint(event.pos):
+                    elif SOLVE_RECT.collidepoint(event.pos):  # Solve button
                         if solvable and not np.all(board == SOLVEDBOARD):
                             moves.extend(solve_board(
                                 board, position, SOLVEDBOARD))
+
+                            with open("solution.txt", "w") as f:
+                                f.write(str(moves))
 
                 else:  # If the clicked tile was next to the blank spot
                     blank_x, blank_y = position[BLANK]
@@ -177,11 +182,16 @@ def main():
 
 
 def process_image(image_source) -> list:
+    '''
+        returns a list, i_th element is the picture corresponds to number i
+    '''
     img = Image.open(image_source)
     img = img.rotate(90)
-    height = NUM_OF_COLS * TILESIZE
+
     width = NUM_OF_ROWS * TILESIZE
+    height = NUM_OF_COLS * TILESIZE
     img = img.resize((width, height), Image.ANTIALIAS)
+
     image_array = np.asarray(img)
     tiles = [image_array[x:x+TILESIZE, y:y+TILESIZE]
              for x in range(0, image_array.shape[0], TILESIZE) for y in range(0, image_array.shape[1], TILESIZE)]
@@ -364,8 +374,7 @@ def is_valid_move(position, move) -> bool:
     return (move == 'up' and blank_x != NUM_OF_ROWS-1) or \
         (move == 'down' and blank_x != 0) or \
         (move == 'left' and blank_y != NUM_OF_COLS-1) or \
-        (move == 'right' and blank_y != 0) \
-
+        (move == 'right' and blank_y != 0)
 
 
 def make_move(board, position, move, animation=True, animation_speed=8) -> str:
@@ -604,30 +613,30 @@ def last_rows(board, positions):
     """
     moves = []
 
-    # We will start from the left side, and do a column in one loop 
+    # We will start from the left side, and do a column in one loop
     for j in range(NUM_OF_COLS-3):
 
         # The two number we will be working with, in the solved state tile_upper supposed to
         # be on the top of tile_below (this is for positions array)
-        tile_upper = (NUM_OF_ROWS-2) * NUM_OF_COLS + j     #tile (N-1, j+1)
-        tile_below = (NUM_OF_ROWS-1) * NUM_OF_COLS + j     #tile ( N , j+1)
+        tile_upper = (NUM_OF_ROWS-2) * NUM_OF_COLS + j  # tile (N-1, j+1)
+        tile_below = (NUM_OF_ROWS-1) * NUM_OF_COLS + j  # tile ( N , j+1)
 
         # Completing the j.-th column consists of 3 steps:
         # 1. Move the "below" tile to coordinates (N-1 , j) (The N-1.th row, and j.-th column)
-        # 2. Check whether the "upper" tile is below the "below" tile 
+        # 2. Check whether the "upper" tile is below the "below" tile
         #       - In this case, there is a series of steps, to put them in order
         # 3. If not, then move the "upper" tile to the right of "below"
         # 4. Move the BLANK under "below", then you can just do a "down" and "left" move and
         #      the column will be completed (when moving BLANKn we dont disturb "below" and "upper")
         #   ROWS\COL         i                                i
         #   (N-1)   [ DONE |          ]     1.      [ DONE |"below"       ]     3.
-        #   (N  )   [ DONE |          ]   ------>   [ DONE |              ]  -------> 
+        #   (N  )   [ DONE |          ]   ------>   [ DONE |              ]  ------->
         #                      i
         #   (N-1)   [ DONE |"below" "upper"]     4.      [ DONE |"below" "upper"]    4,5.
         #   (N  )   [ DONE |               ]   ------>   [ DONE | BLANK         ]  ------->
-        #           
-        #   (N-1)   [ DONE |"upper"  BLANK ] 
-        #   (N  )   [ DONE |"below"        ] 
+        #
+        #   (N-1)   [ DONE |"upper"  BLANK ]
+        #   (N  )   [ DONE |"below"        ]
         #
         #   If, after the first step, "upper" is below "below", we can get to the end in one step
 
@@ -653,10 +662,12 @@ def last_rows(board, positions):
 
     # Last six tile
     # The N-2.th column
-    tile_upper = (NUM_OF_ROWS-2) * NUM_OF_COLS + NUM_OF_COLS - 3     #tile (N-1, N-2)
-    tile_below = (NUM_OF_ROWS-1) * NUM_OF_COLS + NUM_OF_COLS - 3     #tile ( N , N-2)
+    tile_upper = (NUM_OF_ROWS-2) * NUM_OF_COLS + \
+        NUM_OF_COLS - 3  # tile (N-1, N-2)
+    tile_below = (NUM_OF_ROWS-1) * NUM_OF_COLS + \
+        NUM_OF_COLS - 3  # tile ( N , N-2)
 
-    # Move the "below" tile to (N-1, M-2)  
+    # Move the "below" tile to (N-1, M-2)
     moves.extend(move_tile_to(board, positions, tile_below,
                               NUM_OF_ROWS-2, NUM_OF_COLS-3))
     # Move BLANK to (N-1, M-1)
@@ -676,27 +687,25 @@ def last_rows(board, positions):
         moves.extend(do_movelist(board, positions, moves_to_do))
         moves.extend(order_66(board, positions))
     else:
-        print(f'ide gyüttem be')
         moves.append(make_move(board, positions, 'left'))
         moves.extend(order_66(board, positions))
-    print(f'{tile_upper} and {tile_below} are ready')
     # Order 66, garanties that the BLANK will finish on (N-1,M-1)
-    tile_upper = (NUM_OF_ROWS-2) * NUM_OF_COLS + NUM_OF_COLS - 2    #tile (N-1, M-1)
+    tile_upper = (NUM_OF_ROWS-2) * NUM_OF_COLS + \
+        NUM_OF_COLS - 2  # tile (N-1, M-1)
     moves_to_do = []
-    # Sorting out how to move the (N-1,N-1) tile to its place, and finish the puzzle  
+    # Sorting out how to move the (N-1,N-1) tile to its place, and finish the puzzle
     if positions[tile_upper] == (NUM_OF_ROWS-1, NUM_OF_COLS - 2):
-        moves_to_do = ['up','left']
+        moves_to_do = ['up', 'left']
     elif positions[tile_upper] == (NUM_OF_ROWS-1, NUM_OF_COLS - 1):
         moves_to_do = ['left', 'up', 'right', 'down', 'left', 'up']
     else:
         moves_to_do = ['left', 'up']
-    print(f'moves: {moves_to_do}')
     moves.extend(do_movelist(board, positions, moves_to_do))
 
     return moves
 
 
-def solve_board(board, position, SOLVEDBOARD):  # TODO
+def solve_board(board, position, SOLVEDBOARD):
     '''
         Solve the puzzle
     '''
