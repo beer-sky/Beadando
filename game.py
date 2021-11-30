@@ -49,7 +49,7 @@ def main():
         Initialization based on the constants
     '''
     global msg, show_image, show_number, \
-        FPSCLOCK, DISPLAYSURF, BASICFONT, IMAGES, NUM_OF_ROWS, NUM_OF_COLS, BLANK, \
+        FPSCLOCK, DISPLAYSURF, BASICFONT, IMAGES, NUM_OF_ROWS, NUM_OF_COLS, BLANK, XMARGIN, YMARGIN,\
         RESET_SURF, RESET_RECT, NEW_SURF, NEW_RECT, SOLVE_SURF, SOLVE_RECT
 
     # Initialization for the game
@@ -83,7 +83,12 @@ def main():
             NUM_OF_ROWS, NUM_OF_COLS = np.shape(board)
         elif opt in ("--dimensions", "-d") and board is None:
             NUM_OF_ROWS, NUM_OF_COLS = tuple(map(int, val.split(',')))
+
         BLANK = NUM_OF_COLS * NUM_OF_ROWS - 1
+        XMARGIN = (WINDOWWIDTH - (TILESIZE *
+                   NUM_OF_COLS + (NUM_OF_COLS + 1))) // 2
+        YMARGIN = (WINDOWHEIGHT - (TILESIZE *
+                   NUM_OF_ROWS + (NUM_OF_ROWS + 1))) // 2
 
         # Get the image
         if opt in ("--image", "-i"):
@@ -612,8 +617,25 @@ def last_rows(board, positions):
         (Solves a 2*M, within the 2*M box)
     """
     moves = []
+    if NUM_OF_COLS == 2:
+        moves.extend(move_blank_to(board, positions,
+                     NUM_OF_ROWS-2, NUM_OF_COLS-2))
+        # Order 66, garanties that the BLANK will finish on (N-1,M-1)
+        tile_upper = (NUM_OF_ROWS-2) * NUM_OF_COLS + \
+            NUM_OF_COLS - 2  # tile (N-1, M-1)
+        moves_to_do = []
+        # Sorting out how to move the (N-1,N-1) tile to its place, and finish the puzzle
+        if positions[tile_upper] == (NUM_OF_ROWS-1, NUM_OF_COLS - 2):
+            moves_to_do = ['up', 'left']
+        elif positions[tile_upper] == (NUM_OF_ROWS-1, NUM_OF_COLS - 1):
+            moves_to_do = ['left', 'up', 'right', 'down', 'left', 'up']
+        else:
+            moves_to_do = ['left', 'up']
+        moves.extend(do_movelist(board, positions, moves_to_do))
 
-    # We will start from the left side, and do a column in one loop
+        return moves
+
+        # We will start from the left side, and do a column in one loop
     for j in range(NUM_OF_COLS-3):
 
         # The two number we will be working with, in the solved state tile_upper supposed to
@@ -654,7 +676,7 @@ def last_rows(board, positions):
                                       NUM_OF_ROWS-2, j+1))
             # move BLANK below "below" (first to the N.-th column, then below "below")
             moves.extend(move_blank_to(board, positions,
-                                       NUM_OF_ROWS-1, positions[BLANK][0]))
+                                       NUM_OF_ROWS-1, positions[BLANK][1]))
             moves.extend(move_blank_to(board, positions,
                                        NUM_OF_ROWS-1, j))
             # make a "down" and a "left" move, to finish the column
